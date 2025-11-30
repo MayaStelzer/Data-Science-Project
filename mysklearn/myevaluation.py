@@ -1,8 +1,8 @@
 """
 Programmer: Maura Sweeney
 Class: CPSC 322, Fall 2025
-Programming Assignment #5
-11/12/25
+Programming Assignment #7
+11/25/25
 
 Description:
 Evaluation functions for machine learning including train/test splitting, k-fold cross validation, bootstrap sampling, confusion matrices, and performance metrics like accuracy, precision, recall, and F1 score
