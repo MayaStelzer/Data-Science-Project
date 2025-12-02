@@ -14,6 +14,9 @@ from mysklearn.mysimplelinearregressor import MySimpleLinearRegressor
 import math
 import random
 import types
+import copy
+from collections import Counter
+
 
 class MyDecisionTreeClassifier:
     """Represents a decision tree classifier.
@@ -673,137 +676,106 @@ class MyNaiveBayesClassifier:
 
         return y_predicted
 
-
 class MyRandomForestClassifier:
-    """A simple Random Forest classifier built from MyDecisionTreeClassifier.
-
-    Algorithm (basic):
-    - Build N decision trees by bootstrapping the remainder training set.
-    - At each node, when selecting an attribute, randomly sample `max_features`
-      candidate attributes and pick the best among them (entropy / information gain).
-    - Use the out-of-bag (OOB) samples for that tree as its validation set.
-    - Keep the top `n_best` trees by validation accuracy to form the forest.
-
-    Notes:
-    - Expects categorical features (consistent with the other classifiers in this repo).
     """
-    def __init__(self, n_estimators=10, max_features=None, n_best=None, random_state=None):
-        """Initializer.
+    Random Forest Classifier with stratified test set and validation-based tree selection.
 
-        Args:
-            n_estimators(int): N, number of candidate trees to generate.
-            max_features(int or None): F, number of randomly chosen attributes at each node.
-                If None, defaults to max(1, int(sqrt(n_features))) during fit.
-            n_best(int or None): M, number of best trees to keep. If None, defaults to n_estimators//2.
-            random_state(int or None): seed for reproducibility.
-        """
-        self.n_estimators = n_estimators
-        self.max_features = max_features
-        self.n_best = n_best if n_best is not None else max(1, n_estimators // 2)
+    Attributes:
+        N (int): Number of candidate trees.
+        M (int): Number of trees to keep (most accurate on validation set).
+        F (int): Number of features to consider at each node.
+        trees (list): List of selected decision trees.
+        test_set (tuple): Stratified test set (X_test, y_test)
+    """
+
+    def __init__(self, N=10, M=None, F=None, random_state=None):
+        self.N = N
+        self.M = M if M is not None else N
+        self.F = F
+        self.trees = []
+        self.test_set = None
         self.random_state = random_state
+        if random_state is not None:
+            random.seed(random_state)
 
-        self.trees = []  # list of selected MyDecisionTreeClassifier
-        self._n_features = None
+    def stratified_split(self, X, y, test_fraction=1/3):
+        """Split X, y into stratified test set and remainder."""
+        # Group indices by class
+        classes = {}
+        for idx, label in enumerate(y):
+            classes.setdefault(label, []).append(idx)
+        
+        test_idx = []
+        train_idx = []
+        for label, indices in classes.items():
+            n_test = max(1, int(len(indices) * test_fraction))
+            shuffled = indices[:]
+            random.shuffle(shuffled)
+            test_idx.extend(shuffled[:n_test])
+            train_idx.extend(shuffled[n_test:])
+        
+        X_test = [X[i] for i in test_idx]
+        y_test = [y[i] for i in test_idx]
+        X_train = [X[i] for i in train_idx]
+        y_train = [y[i] for i in train_idx]
+        self.test_set = (X_test, y_test)
+        return X_train, y_train
 
-    def fit(self, X_train, y_train):
-        """Fit the random forest using the remainder set (not the 1/3 test split).
+    def bootstrap_sample(self, X, y):
+        """Generate a bootstrap sample from X, y."""
+        n_samples = len(X)
+        X_sample, y_sample = [], []
+        for _ in range(n_samples):
+            idx = random.randrange(n_samples)
+            X_sample.append(copy.deepcopy(X[idx]))
+            y_sample.append(copy.deepcopy(y[idx]))
+        return X_sample, y_sample
 
-        The method generates `n_estimators` trees via bootstrapping and OOB validation,
-        then selects the `n_best` trees by accuracy on their OOB sets.
-        """
-        if self.random_state is not None:
-            random.seed(self.random_state)
+    def random_features(self, n_features):
+        """Select F features randomly."""
+        if self.F is None or self.F > n_features:
+            return list(range(n_features))
+        return random.sample(range(n_features), self.F)
 
-        if not X_train:
-            raise ValueError("X_train must not be empty")
+    def fit(self, X, y):
+        """Train N candidate trees and select M best on validation sets."""
+        X_train, y_train = self.stratified_split(X, y)
+        candidate_trees = []
 
-        n_samples = len(X_train)
-        self._n_features = len(X_train[0])
-
-        # If max_features not set, use sqrt rule
-        if self.max_features is None:
-            default_f = max(1, int(math.sqrt(self._n_features)))
-        else:
-            default_f = max(1, int(self.max_features))
-
-        candidate_trees = []  # tuples of (tree, accuracy)
-
-        for i in range(self.n_estimators):
-            # bootstrap sample indices with replacement
-            bootstrap_indices = [random.randrange(n_samples) for _ in range(n_samples)]
-            oob_indices = [idx for idx in range(n_samples) if idx not in bootstrap_indices]
-
-            X_boot = [X_train[idx] for idx in bootstrap_indices]
-            y_boot = [y_train[idx] for idx in bootstrap_indices]
-
-            # Create a decision tree and monkey-patch its _select_attribute to restrict
-            # candidate attributes randomly at each node.
-            tree = MyDecisionTreeClassifier()
-
-            def _select_attr_with_random_subset(self_tree, X_sub, y_sub, available_attributes):
-                # choose F attributes (or fewer if not enough available)
-                F = min(default_f, len(available_attributes))
-                if F <= 0:
-                    subset = available_attributes
-                else:
-                    # sample without replacement from available_attributes
-                    subset = random.sample(available_attributes, F) if len(available_attributes) > F else available_attributes
-                # call the original selection logic from the class implementation
-                return MyDecisionTreeClassifier._select_attribute(self_tree, X_sub, y_sub, subset)
-
-            # bind the wrapper to this instance
-            tree._select_attribute = types.MethodType(_select_attr_with_random_subset, tree)
-
-            # fit tree on bootstrap sample
-            tree.fit(X_boot, y_boot)
-
-            # evaluate on OOB (validation) set
-            if len(oob_indices) == 0:
-                val_accuracy = 0.0
+        for _ in range(self.N):
+            # Bootstrap sample from remainder
+            X_sample, y_sample = self.bootstrap_sample(X_train, y_train)
+            # Random features
+            features = self.random_features(len(X[0]))
+            X_reduced = [[row[i] for i in features] for row in X_sample]
+            # Validation set (out-of-bag samples)
+            oob_indices = [i for i in range(len(X_train)) if X_train[i] not in X_sample]
+            if oob_indices:
+                X_val = [[X_train[i][j] for j in features] for i in oob_indices]
+                y_val = [y_train[i] for i in oob_indices]
             else:
-                X_oob = [X_train[idx] for idx in oob_indices]
-                y_oob = [y_train[idx] for idx in oob_indices]
-                y_pred = tree.predict(X_oob)
-                correct = sum(1 for a, b in zip(y_pred, y_oob) if a == b)
-                val_accuracy = correct / len(y_oob)
+                X_val = X_reduced
+                y_val = y_sample
 
-            candidate_trees.append((tree, val_accuracy))
+            # Train tree
+            tree = MyDecisionTreeClassifier()
+            tree.fit(X_reduced, y_sample)
+            tree.features = features
 
-        # select the top n_best trees by validation accuracy
-        candidate_trees.sort(key=lambda t: t[1], reverse=True)
-        selected = candidate_trees[: self.n_best]
-        self.trees = [t for t, _ in selected]
+            # Compute accuracy on validation
+            y_pred = tree.predict(X_val)
+            accuracy = sum(1 for a, b in zip(y_pred, y_val) if a == b) / len(y_val)
+            candidate_trees.append((tree, accuracy))
 
-    def predict(self, X_test):
-        """Predict by majority voting among the selected trees.
+        # Select M best trees
+        candidate_trees.sort(key=lambda x: x[1], reverse=True)
+        self.trees = [t[0] for t in candidate_trees[:self.M]]
 
-        Args:
-            X_test(list of list): test instances
-        Returns:
-            list of predictions
-        """
-        if not self.trees:
-            raise ValueError("Must fit the random forest before calling predict()")
-
-        # collect predictions from each tree
-        all_preds = [tree.predict(X_test) for tree in self.trees]
-        # transpose: for each sample index, gather predictions
-        y_pred = []
-        for j in range(len(X_test)):
-            votes = [preds[j] for preds in all_preds]
-            freqs = myutils.count_frequencies(votes)
-            # choose label with highest frequency; break ties by order in votes
-            max_count = max(freqs.values())
-            tied = [label for label, cnt in freqs.items() if cnt == max_count]
-            # choose first occurrence in votes among tied labels
-            chosen = None
-            for v in votes:
-                if v in tied:
-                    chosen = v
-                    break
-            if chosen is None:
-                chosen = tied[0]
-            y_pred.append(chosen)
-
-        return y_pred
-    
+    def predict(self, X):
+        """Predict classes using majority vote from M trees."""
+        predictions = []
+        for row in X:
+            votes = [tree.predict([[row[i] for i in tree.features]])[0] for tree in self.trees]
+            majority = Counter(votes).most_common(1)[0][0]
+            predictions.append(majority)
+        return predictions
