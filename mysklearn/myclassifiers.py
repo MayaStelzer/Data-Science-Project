@@ -12,6 +12,8 @@ Multiple classifiers including Simple Linear Regression, k-Nearest Neighbors, Du
 from mysklearn import myutils
 from mysklearn.mysimplelinearregressor import MySimpleLinearRegressor
 import math
+import random
+import types
 
 class MyDecisionTreeClassifier:
     """Represents a decision tree classifier.
@@ -670,3 +672,138 @@ class MyNaiveBayesClassifier:
             y_predicted.append(predicted_class)
 
         return y_predicted
+
+
+class MyRandomForestClassifier:
+    """A simple Random Forest classifier built from MyDecisionTreeClassifier.
+
+    Algorithm (basic):
+    - Build N decision trees by bootstrapping the remainder training set.
+    - At each node, when selecting an attribute, randomly sample `max_features`
+      candidate attributes and pick the best among them (entropy / information gain).
+    - Use the out-of-bag (OOB) samples for that tree as its validation set.
+    - Keep the top `n_best` trees by validation accuracy to form the forest.
+
+    Notes:
+    - Expects categorical features (consistent with the other classifiers in this repo).
+    """
+    def __init__(self, n_estimators=10, max_features=None, n_best=None, random_state=None):
+        """Initializer.
+
+        Args:
+            n_estimators(int): N, number of candidate trees to generate.
+            max_features(int or None): F, number of randomly chosen attributes at each node.
+                If None, defaults to max(1, int(sqrt(n_features))) during fit.
+            n_best(int or None): M, number of best trees to keep. If None, defaults to n_estimators//2.
+            random_state(int or None): seed for reproducibility.
+        """
+        self.n_estimators = n_estimators
+        self.max_features = max_features
+        self.n_best = n_best if n_best is not None else max(1, n_estimators // 2)
+        self.random_state = random_state
+
+        self.trees = []  # list of selected MyDecisionTreeClassifier
+        self._n_features = None
+
+    def fit(self, X_train, y_train):
+        """Fit the random forest using the remainder set (not the 1/3 test split).
+
+        The method generates `n_estimators` trees via bootstrapping and OOB validation,
+        then selects the `n_best` trees by accuracy on their OOB sets.
+        """
+        if self.random_state is not None:
+            random.seed(self.random_state)
+
+        if not X_train:
+            raise ValueError("X_train must not be empty")
+
+        n_samples = len(X_train)
+        self._n_features = len(X_train[0])
+
+        # If max_features not set, use sqrt rule
+        if self.max_features is None:
+            default_f = max(1, int(math.sqrt(self._n_features)))
+        else:
+            default_f = max(1, int(self.max_features))
+
+        candidate_trees = []  # tuples of (tree, accuracy)
+
+        for i in range(self.n_estimators):
+            # bootstrap sample indices with replacement
+            bootstrap_indices = [random.randrange(n_samples) for _ in range(n_samples)]
+            oob_indices = [idx for idx in range(n_samples) if idx not in bootstrap_indices]
+
+            X_boot = [X_train[idx] for idx in bootstrap_indices]
+            y_boot = [y_train[idx] for idx in bootstrap_indices]
+
+            # Create a decision tree and monkey-patch its _select_attribute to restrict
+            # candidate attributes randomly at each node.
+            tree = MyDecisionTreeClassifier()
+
+            def _select_attr_with_random_subset(self_tree, X_sub, y_sub, available_attributes):
+                # choose F attributes (or fewer if not enough available)
+                F = min(default_f, len(available_attributes))
+                if F <= 0:
+                    subset = available_attributes
+                else:
+                    # sample without replacement from available_attributes
+                    subset = random.sample(available_attributes, F) if len(available_attributes) > F else available_attributes
+                # call the original selection logic from the class implementation
+                return MyDecisionTreeClassifier._select_attribute(self_tree, X_sub, y_sub, subset)
+
+            # bind the wrapper to this instance
+            tree._select_attribute = types.MethodType(_select_attr_with_random_subset, tree)
+
+            # fit tree on bootstrap sample
+            tree.fit(X_boot, y_boot)
+
+            # evaluate on OOB (validation) set
+            if len(oob_indices) == 0:
+                val_accuracy = 0.0
+            else:
+                X_oob = [X_train[idx] for idx in oob_indices]
+                y_oob = [y_train[idx] for idx in oob_indices]
+                y_pred = tree.predict(X_oob)
+                correct = sum(1 for a, b in zip(y_pred, y_oob) if a == b)
+                val_accuracy = correct / len(y_oob)
+
+            candidate_trees.append((tree, val_accuracy))
+
+        # select the top n_best trees by validation accuracy
+        candidate_trees.sort(key=lambda t: t[1], reverse=True)
+        selected = candidate_trees[: self.n_best]
+        self.trees = [t for t, _ in selected]
+
+    def predict(self, X_test):
+        """Predict by majority voting among the selected trees.
+
+        Args:
+            X_test(list of list): test instances
+        Returns:
+            list of predictions
+        """
+        if not self.trees:
+            raise ValueError("Must fit the random forest before calling predict()")
+
+        # collect predictions from each tree
+        all_preds = [tree.predict(X_test) for tree in self.trees]
+        # transpose: for each sample index, gather predictions
+        y_pred = []
+        for j in range(len(X_test)):
+            votes = [preds[j] for preds in all_preds]
+            freqs = myutils.count_frequencies(votes)
+            # choose label with highest frequency; break ties by order in votes
+            max_count = max(freqs.values())
+            tied = [label for label, cnt in freqs.items() if cnt == max_count]
+            # choose first occurrence in votes among tied labels
+            chosen = None
+            for v in votes:
+                if v in tied:
+                    chosen = v
+                    break
+            if chosen is None:
+                chosen = tied[0]
+            y_pred.append(chosen)
+
+        return y_pred
+    
