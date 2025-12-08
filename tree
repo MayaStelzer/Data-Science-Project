@@ -1,0 +1,104 @@
+// Decision Tree
+digraph {
+	node [color=lightgray shape=rectangle style=filled]
+	5286835968 [label=att4 color=lightgray shape=box]
+	5286827904 [label="Leaf
+class = e
+count = 400
+parent = 5644" color=lightblue shape=ellipse]
+	5286835968 -> 5286827904 [label=a]
+	5286831168 [label="Leaf
+class = p
+count = 192
+parent = 5644" color=lightblue shape=ellipse]
+	5286835968 -> 5286831168 [label=c]
+	5286834816 [label="Leaf
+class = p
+count = 1584
+parent = 5644" color=lightblue shape=ellipse]
+	5286835968 -> 5286834816 [label=f]
+	5286837376 [label="Leaf
+class = e
+count = 400
+parent = 5644" color=lightblue shape=ellipse]
+	5286835968 -> 5286837376 [label=l]
+	5286836864 [label="Leaf
+class = p
+count = 36
+parent = 5644" color=lightblue shape=ellipse]
+	5286835968 -> 5286836864 [label=m]
+	5286834944 [label=att19 color=lightgray shape=box]
+	5286835968 -> 5286834944 [label=n]
+	5286831936 [label="Leaf
+class = e
+count = 0
+parent = 2776" color=lightblue shape=ellipse]
+	5286834944 -> 5286831936 [label=h]
+	5286834240 [label="Leaf
+class = e
+count = 1296
+parent = 2776" color=lightblue shape=ellipse]
+	5286834944 -> 5286834240 [label=k]
+	5286834496 [label="Leaf
+class = e
+count = 1296
+parent = 2776" color=lightblue shape=ellipse]
+	5286834944 -> 5286834496 [label=n]
+	5286836928 [label="Leaf
+class = p
+count = 72
+parent = 2776" color=lightblue shape=ellipse]
+	5286834944 -> 5286836928 [label=r]
+	5286832960 [label="Leaf
+class = e
+count = 0
+parent = 2776" color=lightblue shape=ellipse]
+	5286834944 -> 5286832960 [label=u]
+	5286835200 [label=att2 color=lightgray shape=box]
+	5286834944 -> 5286835200 [label=w]
+	5286837696 [label="Leaf
+class = e
+count = 0
+parent = 112" color=lightblue shape=ellipse]
+	5286835200 -> 5286837696 [label=b]
+	5286833728 [label="Leaf
+class = e
+count = 32
+parent = 112" color=lightblue shape=ellipse]
+	5286835200 -> 5286833728 [label=c]
+	4829966528 [label="Leaf
+class = e
+count = 0
+parent = 112" color=lightblue shape=ellipse]
+	5286835200 -> 4829966528 [label=e]
+	4829967104 [label="Leaf
+class = e
+count = 8
+parent = 112" color=lightblue shape=ellipse]
+	5286835200 -> 4829967104 [label=g]
+	4829961152 [label="Leaf
+class = e
+count = 48
+parent = 112" color=lightblue shape=ellipse]
+	5286835200 -> 4829961152 [label=n]
+	4829962112 [label="Leaf
+class = e
+count = 8
+parent = 112" color=lightblue shape=ellipse]
+	5286835200 -> 4829962112 [label=p]
+	4829968256 [label="Leaf
+class = p
+count = 8
+parent = 112" color=lightblue shape=ellipse]
+	5286835200 -> 4829968256 [label=w]
+	4829968512 [label="Leaf
+class = p
+count = 8
+parent = 112" color=lightblue shape=ellipse]
+	5286835200 -> 4829968512 [label=y]
+	5286825408 [label="Leaf
+class = p
+count = 256
+parent = 5644" color=lightblue shape=ellipse]
+	5286835968 -> 5286825408 [label=p]
+}

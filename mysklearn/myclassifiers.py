@@ -16,7 +16,7 @@ import random
 import types
 import copy
 from collections import Counter
-
+from graphviz import Digraph
 
 class MyDecisionTreeClassifier:
     """Represents a decision tree classifier.
@@ -336,6 +336,70 @@ class MyDecisionTreeClassifier:
                     subtree = value_branch[2]
                     new_path = current_path + [(att_index, value)]
                     self._extract_rules(subtree, new_path, rules, attribute_names, class_name)
+
+    def visualize_tree(self, dot_fname, pdf_fname, attribute_names=None):
+        """BONUS: Visualizes a tree via the open source Graphviz graph visualization package and
+        its DOT graph language (produces .dot and .pdf files).
+
+        Args:
+            dot_fname(str): The name of the .dot output file.
+            pdf_fname(str): The name of the .pdf output file generated from the .dot file.
+            attribute_names(list of str or None): A list of attribute names to use in the decision rules
+                (None if a list is not provided and the default attribute names based on indexes
+                (e.g. "att0", "att1", ...) should be used).
+
+        Notes:
+            Graphviz: https://graphviz.org/
+            DOT language: https://graphviz.org/doc/info/lang.html
+            You will need to install graphviz in the Docker container as shown in class to complete this method.
+        """
+        dot = Digraph(comment="Decision Tree")
+        dot.attr("node", shape="rectangle", style="filled", color="lightgray")
+
+        def add_nodes_edges(tree, parent_id=None, edge_label=""):
+            """Internal helper to recursively add nodes and edges to DOT graph."""
+            node_id = str(id(tree))
+
+            if tree[0] == "Leaf":
+                label = f"Leaf\nclass = {tree[1]}\ncount = {tree[2]}\nparent = {tree[3]}"
+                dot.node(node_id, label=label, shape="ellipse", color="lightblue")
+                if parent_id is not None:
+                    dot.edge(parent_id, node_id, label=edge_label)
+                return
+
+            if tree[0] == "Attribute":
+                att_index = int(tree[1][3:])
+                if attribute_names:
+                    label = f"{attribute_names[att_index]}"
+                else:
+                    label = tree[1]
+                
+                dot.node(node_id, label=label, shape="box", color="lightgray")
+                if parent_id is not None:
+                    dot.edge(parent_id, node_id, label=edge_label)
+
+                for i in range(2, len(tree)):
+                    branch = tree[i]
+                    value = branch[1]
+                    subtree = branch[2]
+                    add_nodes_edges(subtree, node_id, str(value))
+
+        add_nodes_edges(self.tree)
+        
+        # Remove extensions to get base names
+        dot_base = dot_fname.replace('.dot', '')
+        pdf_base = pdf_fname.replace('.pdf', '')
+        
+        # Render creates both .dot and .pdf with the same base name
+        # So we render with dot_base, then rename if needed
+        dot.render(filename=dot_base, format="pdf", cleanup=False)
+        
+        # If the user wants different names for .dot and .pdf, handle that
+        if dot_base != pdf_base:
+            import os
+            os.rename(f"{dot_base}.pdf", f"{pdf_base}.pdf")
+        
+
 class MySimpleLinearRegressionClassifier:
     """Represents a simple linear regression classifier that discretizes
         predictions from a simple linear regressor (see MySimpleLinearRegressor).
